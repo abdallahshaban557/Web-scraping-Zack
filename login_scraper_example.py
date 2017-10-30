@@ -8,6 +8,7 @@ import time
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.support.ui import Select
+from selenium.webdriver.common.keys import Keys
 from openpyxl import Workbook
 from openpyxl import load_workbook
 
@@ -25,135 +26,95 @@ try:
     })
     #Open the chrome driver, and navigate to the page
     driver = webdriver.Chrome("chromedriver/chromedriver.exe",chrome_options=chrome_options)
-    driver.get("https://www.zacks.com/stock/research/AAP/earnings-announcements")
+    driver.get("https://www.zacks.com/")
 
-    #Isolate the input fields, and insert data to form
-    # USERNAME = driver.find_element_by_css_selector('#user_email')
-    # USERNAME.send_keys('bbliss@sandiego.edu')
-    # PASSWORD = driver.find_element_by_css_selector('#user_password')
-    # PASSWORD.send_keys('fsu-stu712bb')
-    # LOGIN = driver.find_element_by_xpath("//input[@value='Sign in']")
-    Ticker_Symbol = driver.find_element_by_name('t')
-
-    #start loop here
-    Ticker_Symbol.send_keys('ticket')
-
-    #Select the drop down row list and select 100 as the row number
-    Drop_Down_List = Select(driver.find_element_by_xpath('//*[@id="earnings_announcements_earnings_table_length"]/label/select'))
-    Drop_Down_List.select_by_visible_text('100')
-
-    #Row number in the website EPS table
-    EPS_Table_Row_Number = 2
-
-  
-
-  
-    #Go through the whole table of EPS
-    while True:
-        try:
-            Date_Of_EPS = driver.find_element_by_xpath('//*[@id="earnings_announcements_earnings_table_wrapper"]/div[3]/div[3]/div[2]/div/table/tbody/tr['+ str(EPS_Table_Row_Number) +']/td')
-            #Just for validation
-            print(Date_Of_EPS.text)
-            EPS_Table_Row_Number += 1
-        except Exception as e:
-            break
     
 
+    #Load original Excel file - and select the needed sheet - get maximum row number
+    Result_File = load_workbook('results_file/messedupb.xlsx')
+    Result_sheet = Result_File.worksheets[0]
+    Max_Row_Count = Result_sheet.max_row
 
-    #Submit Data
-    # LOGIN.click()
+    #Count not found ticker EPS on site
+    Not_Found_Tickers = 0
+    
+    for i in range(2, Max_Row_Count):
+        #Get the ticker and EPS date from data sheet
+        print(i)  
 
-    #Create results sheet
-    results_file = Workbook()
+        #Save a final results sheet
+        Result_File.save('results_file/FINAL.xlsx')  
 
-    #synopsis work sheet
-    synopsis_worksheet = results_file.create_sheet("synopsis")
+        Ticker_Symbol = Result_sheet.cell(row=i, column=6).value
+        EPS_Date = str(Result_sheet.cell(row=i, column=11).value)
 
-    #links work_sheet
-    links_worksheet = results_file.create_sheet("Document Links")
+        #Get all EPS values in data sheet
+        IBES_Estimize_actual = str(Result_sheet.cell(row=i, column=2).value)
+        IBES_actual = str(Result_sheet.cell(row=i, column=4).value)
+        IBES_adj_actual = str(Result_sheet.cell(row=i, column=5).value)
 
-    #Create labels for the sheets
-    links_worksheet.cell(row=1, column=1).value = "Date"
-    links_worksheet.cell(row=1, column=2).value = "Source"
-    links_worksheet.cell(row=1, column=3).value = "Label"
-    links_worksheet.cell(row=1, column=4).value = "URL"
-    links_worksheet.cell(row=1, column=5).value = "Ticker Symbol"
+        #Locate the search box on top of the page
+        Ticker_Symbol_Search = driver.find_element_by_name('search-q')
 
-    synopsis_worksheet.cell(row=1, column=1).value = "Synopsis"
-    synopsis_worksheet.cell(row=1, column=2).value = "Ticker Symbol"
-    #Access the original excel sheet
-    original_list = load_workbook('source_file/list.xlsx')
+        #send ticker symbol value to the search box
+        Ticker_Symbol_Search.send_keys(Ticker_Symbol)
+        
+        #Press enter on the search box
+        Ticker_Symbol_Search.send_keys(Keys.ENTER)
 
-    #Get the exact sheet
-    scraping_sheet = original_list.worksheets[0]
+        try:
+            #find earnings announcement from the sidemenu
+            Earnings_Announcement = driver.find_element_by_xpath('//*[@id="left_rail"]/nav/div[2]/ul[3]/li[2]/ul/li[4]/a')
 
-    #count number of rows in sheet (Minus one because there is a title)
-    row_count = scraping_sheet.max_row - 1
+            #Click on earnings announcement in the sidemenu
+            driver.execute_script("arguments[0].click();", Earnings_Announcement)
 
-    #Current result sheet row - this is a counter to know where to start writing from the iteration in the second loop
-    results_sheet_row = 2
+            #Select the drop down row list and select 100 as the row number
+            Drop_Down_List = Select(driver.find_element_by_xpath('//*[@id="earnings_announcements_earnings_table_length"]/label/select'))
+            Drop_Down_List.select_by_visible_text('100')
 
-    #Starting the iterations of the scraping list
-    for i in range(2, row_count+2):
-        #Set cell ID
-        cell_id = 'A'+str(i)
+            time.sleep(1)
 
-        #Retrieve value of cell
-        cell_value = scraping_sheet[cell_id].value
+            #Row number in the website EPS table
+            EPS_Table_Row_Number = 2
+        
+            #Go through the whole table of EPS
+            while True:
+                try:
+                    Date_Of_EPS = driver.find_element_by_xpath('//*[@id="earnings_announcements_earnings_table_wrapper"]/div[3]/div[3]/div[2]/div/table/tbody/tr['+ str(EPS_Table_Row_Number) +']/td').text
+                
+                    if Date_Of_EPS == EPS_Date:
+                        Reported_EPS = driver.find_element_by_xpath('//*[@id="earnings_announcements_earnings_table"]/tbody/tr[' + str(EPS_Table_Row_Number) + ']/td[4]').text
+                        Reported_EPS = Reported_EPS[1:]
+                        #Condition to add the value of IBES_RIGHT in data sheet
+                        if IBES_actual == Reported_EPS or IBES_adj_actual == Reported_EPS:
+                            Result_sheet.cell(row=i, column=9).value = "1"
+                        elif IBES_Estimize_actual != Reported_EPS:
+                            Result_sheet.cell(row=i, column=9).value = ""
+                        else:
+                            Result_sheet.cell(row=i, column=9).value = "0"
+                         
+                        #Condition to add the value of ESTIMIZE to data sheet
+                        if IBES_Estimize_actual == Reported_EPS:
+                            Result_sheet.cell(row=i, column=10).value = "1"
+                        else:
+                            Result_sheet.cell(row=i, column=10).value = "0"
 
-        driver.get("https://www.activistshorts.com/search/results?company%5Btickers%5D="+cell_value)
-        time.sleep(3)
-
-        #Get to the last required page
-        # link_to_search_result = driver.find_element_by_xpath('//*[@id="container"]/div/div/div[2]/div/table/tbody/tr[1]/td[1]/a')
-        # link_to_search_result = driver.find_element_by_xpath('//*[@id="container"]/div/div/div[2]/div/table/tbody/tr/td[1]/a')
-        link_to_search_result = driver.find_element_by_css_selector(".tablesorter tbody tr td a")
-        link_to_search_result.click()
-        time.sleep(3)
-
-        #Synopsis copy
-        synopsis = driver.find_element_by_css_selector(".synopsis p")
-        # synopsis_worksheet['A'+i].value = synopsis.text
-        # synopsis_worksheet['B'+i].value = cell_value
-
-        #Set Synopsis
-        synopsis_worksheet.cell(row=i, column=1).value = synopsis.text
-
-        #Add Ticker
-        synopsis_worksheet.cell(row=i, column=2).value = cell_value
-
-        #Bottom links counter
-        documents_rows = driver.find_elements_by_css_selector(".tablesorter tbody tr")
-
-        #Find number of rows in documents table, we add one so that the loop below accounts for the header location
-        size_documents_rows = len(documents_rows)
-        time.sleep(3)
-
-        #loop through TD elements
-        for j in range(1, size_documents_rows+1):
-            #Find Tr element data-url attribute that contains the URL
-            url_cell = driver.find_element_by_xpath("//div/div/div[4]/div/div/div[8]/div/table/tbody/tr[" + str(j) + "]").get_attribute("data-url")
-            #Copy URL to sheet
-            links_worksheet.cell(row=results_sheet_row, column=4).value = url_cell
-            #Copy ticket symbol to URL
-            links_worksheet.cell(row=results_sheet_row, column=5).value = cell_value
-            for z in range(1, 4):
-                    single_cell = driver.find_element_by_xpath("//div/div/div[4]/div/div/div[8]/div/table/tbody/tr[" + str(j) + "]/td[" + str(z) + "]")
-                    links_worksheet.cell(row=results_sheet_row, column=z).value = single_cell.text
-            results_sheet_row = results_sheet_row+1
-            # save results sheet
-            results_file.save("results_file/result.xlsx")
-
-        #Mark cell as done
-        scraping_sheet['B'+str(i)].value = "Done"
-        original_list.save("source_file/log.xlsx")
-
-
-    #Delete unnecessary sheet
-    empty_sheet = results_file.get_sheet_by_name('Sheet')
-    results_file.remove_sheet(empty_sheet)
-
-
+                    #Increment counter for loop
+                    EPS_Table_Row_Number += 1
+                   
+                
+                except Exception as e:
+                    break         
+        except Exception as e:
+            Result_sheet.cell(row=i, column=9).value = 'N/A'
+            Result_sheet.cell(row=i, column=10).value = 'N/A'
+            Not_Found_Tickers += 1
+            print('not found '+Not_Found_Tickers)
+            
+    
+    #Save a final results sheet
+    Result_File.save('results_file/FINAL.xlsx')   
 
     #close the chrome page
     driver.close()
