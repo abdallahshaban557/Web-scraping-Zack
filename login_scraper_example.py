@@ -90,7 +90,7 @@ try:
                         if IBES_actual == Reported_EPS or IBES_adj_actual == Reported_EPS:
                             Result_sheet.cell(row=i, column=9).value = "1"
                         elif IBES_Estimize_actual != Reported_EPS:
-                            Result_sheet.cell(row=i, column=9).value = ""
+                            Result_sheet.cell(row=i, column=9).value = "0"
                         else:
                             Result_sheet.cell(row=i, column=9).value = "0"
                          
@@ -110,7 +110,7 @@ try:
             Result_sheet.cell(row=i, column=9).value = 'N/A'
             Result_sheet.cell(row=i, column=10).value = 'N/A'
             Not_Found_Tickers += 1
-            print('not found '+Not_Found_Tickers)
+            print('not found '+ str(Not_Found_Tickers))
             
     
     #Save a final results sheet
